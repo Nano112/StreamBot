@@ -13,8 +13,9 @@ interface OverlayState {
 	announcement: string;
 }
 
-const FRAME_REFRESH_MS = 700;
-const FRAME_URL = '/debug/frame.bmp';
+const FRAME_REFRESH_MS = 500;
+const PREVIEW_URL = '/debug/preview.jpg';   // real-time JPEG from the GStreamer pipeline
+const FALLBACK_URL = '/debug/frame.bmp';    // synthetic idle frame, used until JPEG appears
 
 export function OverlayCard() {
 	const qc = useQueryClient();
@@ -179,7 +180,8 @@ export function OverlayCard() {
 }
 
 function PreviewImage({ active }: { active: boolean }) {
-	const [src, setSrc] = useState(`${FRAME_URL}?t=${Date.now()}`);
+	const [base, setBase] = useState(PREVIEW_URL);
+	const [src, setSrc] = useState(`${PREVIEW_URL}?t=${Date.now()}`);
 	const [err, setErr] = useState(false);
 
 	useEffect(() => {
@@ -191,12 +193,22 @@ function PreviewImage({ active }: { active: boolean }) {
 				timer = setTimeout(tick, FRAME_REFRESH_MS * 4);
 				return;
 			}
-			setSrc(`${FRAME_URL}?t=${Date.now()}`);
+			setSrc(`${base}?t=${Date.now()}`);
 			timer = setTimeout(tick, FRAME_REFRESH_MS);
 		};
 		timer = setTimeout(tick, FRAME_REFRESH_MS);
 		return () => { cancelled = true; clearTimeout(timer); };
-	}, []);
+	}, [base]);
+
+	function handleError() {
+		// Fall back to the synthetic BMP if the JPEG endpoint 404s
+		// (e.g. compositor not running yet); permanent failure → error state.
+		if (base === PREVIEW_URL) {
+			setBase(FALLBACK_URL);
+		} else {
+			setErr(true);
+		}
+	}
 
 	return (
 		<div className="relative aspect-video w-full bg-[color:var(--color-bg)]">
@@ -205,7 +217,8 @@ function PreviewImage({ active }: { active: boolean }) {
 					src={src}
 					alt="Stream preview"
 					className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-300 ${active ? 'opacity-100' : 'opacity-50'}`}
-					onError={() => setErr(true)}
+					onError={handleError}
+					onLoad={() => { if (err) setErr(false); }}
 				/>
 			) : (
 				<div className="absolute inset-0 flex items-center justify-center font-mono text-[11px] tracking-[0.18em] uppercase text-[color:var(--color-fg-dim)]">

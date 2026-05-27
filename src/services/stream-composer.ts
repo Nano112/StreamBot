@@ -32,6 +32,7 @@ export class StreamComposer {
 	private _position = 0;
 	private _duration = 0;
 	private fifoPath: string;
+	private previewPath: string;
 	private fifoKeepAlive: WriteStream | null = null;
 
 	private renderer: FrameRenderer;
@@ -43,8 +44,11 @@ export class StreamComposer {
 		this.renderer = new FrameRenderer(config.width, config.height);
 		this.currentFrame = this.renderIdleFrame(this._idleInfo);
 		this.fifoPath = join(tmpdir(), `sb-gst-${process.pid}.mkv`);
+		this.previewPath = join(tmpdir(), `sb-gst-preview-${process.pid}.jpg`);
 		logger.info('Stream composer ready');
 	}
+
+	getPreviewPath(): string { return this.previewPath; }
 
 	get running(): boolean { return this._running; }
 	get mediaPlaying(): boolean { return this._mediaPlaying; }
@@ -119,8 +123,9 @@ export class StreamComposer {
 		this._running = true;
 		this.abortController = new AbortController();
 
-		// Create FIFO
+		// Create FIFO + clear any stale preview snapshot from a previous run
 		try { unlinkSync(this.fifoPath); } catch {}
+		try { unlinkSync(this.previewPath); } catch {}
 		try { execSync(`mkfifo "${this.fifoPath}"`, { timeout: 5000 }); } catch (e) {
 			logger.error('Failed to create FIFO:', e);
 			this._running = false;
@@ -140,6 +145,7 @@ export class StreamComposer {
 				GST_FPS: String(config.fps),
 				GST_BITRATE: String(config.bitrateKbps),
 				GST_FIFO_PATH: this.fifoPath,
+				GST_PREVIEW_PATH: this.previewPath,
 				GST_PLUGIN_SYSTEM_PATH: '/opt/homebrew/lib/gstreamer-1.0',
 				DYLD_LIBRARY_PATH: '/opt/homebrew/lib',
 			},

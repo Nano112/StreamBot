@@ -23,6 +23,9 @@ HEIGHT = int(os.environ.get('GST_HEIGHT', '720'))
 FPS = int(os.environ.get('GST_FPS', '30'))
 BITRATE = int(os.environ.get('GST_BITRATE', '1000'))
 FIFO_PATH = os.environ.get('GST_FIFO_PATH', '/tmp/sb-gst-output.mkv')
+PREVIEW_PATH = os.environ.get('GST_PREVIEW_PATH', '/tmp/sb-gst-preview.jpg')
+PREVIEW_FPS = int(os.environ.get('GST_PREVIEW_FPS', '2'))
+PREVIEW_QUALITY = int(os.environ.get('GST_PREVIEW_QUALITY', '60'))
 
 
 # Logs go to stdout (matroska goes to FIFO file, not stdout)
@@ -53,11 +56,15 @@ class StreamController:
             f'textoverlay name=overlay text="{self._escape_text(self.overlay_text)}" '
             f'  valignment=top halignment=right font-desc="Monospace 11" '
             f'  shaded-background=true shading-value=160 xpad=10 ypad=10 line-alignment=left ! '
-            f'videoconvert ! '
+            f'tee name=vtee '
+            f'vtee. ! queue ! videoconvert ! '
             f'x264enc tune=zerolatency speed-preset=ultrafast bitrate={BITRATE} bframes=0 key-int-max={FPS*2} ! '
             f'queue max-size-time=500000000 ! '
             f'mpegtsmux name=mux ! '
             f'filesink location={FIFO_PATH} sync=false '
+            f'vtee. ! queue leaky=2 max-size-buffers=2 ! videorate ! video/x-raw,framerate={PREVIEW_FPS}/1 ! '
+            f'videoconvert ! jpegenc quality={PREVIEW_QUALITY} ! '
+            f'appsink name=preview_sink sync=false max-buffers=1 drop=true '
             f' '
             f'audiotestsrc wave=silence is-live=true ! '
             f'audio/x-raw,rate=48000,channels=2,format=S16LE ! '
@@ -67,9 +74,38 @@ class StreamController:
         )
 
         self.pipeline = Gst.parse_launch(desc)
+        self._wire_preview_sink()
         self._setup_bus()
         self.current_mode = "idle"
         log("Idle pipeline built")
+
+    def _wire_preview_sink(self):
+        """Hook the named preview_sink appsink so each JPEG buffer is written
+        atomically to PREVIEW_PATH (so HTTP readers never see a half-written file)."""
+        sink = self.pipeline.get_by_name("preview_sink")
+        if not sink:
+            return
+        sink.set_property("emit-signals", True)
+        sink.connect("new-sample", self._on_preview_sample)
+
+    def _on_preview_sample(self, sink):
+        sample = sink.emit("pull-sample")
+        if not sample:
+            return Gst.FlowReturn.OK
+        buf = sample.get_buffer()
+        success, mapinfo = buf.map(Gst.MapFlags.READ)
+        if not success:
+            return Gst.FlowReturn.OK
+        try:
+            tmp = PREVIEW_PATH + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(mapinfo.data)
+            os.replace(tmp, PREVIEW_PATH)
+        except Exception as e:
+            log(f"preview write failed: {e}")
+        finally:
+            buf.unmap(mapinfo)
+        return Gst.FlowReturn.OK
 
     def _build_media_pipeline(self, url):
         """Build media pipeline with uridecodebin + programmatic pad linking."""
@@ -99,6 +135,7 @@ class StreamController:
         overlay.set_property("xpad", 10)
         overlay.set_property("ypad", 10)
         overlay.set_property("line-alignment", "left")
+        vtee = Gst.ElementFactory.make("tee", "vtee")
         venc = Gst.ElementFactory.make("x264enc", "venc")
         venc.set_property("tune", 0x04)  # zerolatency
         venc.set_property("speed-preset", 1)  # ultrafast (prepareStream re-encodes anyway)
@@ -130,19 +167,50 @@ class StreamController:
         sink.set_property("location", FIFO_PATH)
         sink.set_property("sync", True)  # Realtime pacing for media
 
+        # Preview branch (off the tee): downsample to PREVIEW_FPS, JPEG-encode,
+        # appsink writes each frame atomically to PREVIEW_PATH for HTTP polling.
+        pvq = Gst.ElementFactory.make("queue", "pvq")
+        pvq.set_property("leaky", 2)            # downstream — drop old frames
+        pvq.set_property("max-size-buffers", 2)
+        pvq.set_property("max-size-time", 0)
+        pvq.set_property("max-size-bytes", 0)
+        pvrate = Gst.ElementFactory.make("videorate", "pvrate")
+        pvcaps = Gst.ElementFactory.make("capsfilter", "pvcaps")
+        pvcaps.set_property("caps", Gst.Caps.from_string(f"video/x-raw,framerate={PREVIEW_FPS}/1"))
+        pvconv = Gst.ElementFactory.make("videoconvert", "pvconv")
+        pvenc = Gst.ElementFactory.make("jpegenc", "pvenc")
+        pvenc.set_property("quality", PREVIEW_QUALITY)
+        pvsink = Gst.ElementFactory.make("appsink", "preview_sink")
+        pvsink.set_property("emit-signals", True)
+        pvsink.set_property("sync", False)
+        pvsink.set_property("max-buffers", 1)
+        pvsink.set_property("drop", True)
+
         # Add all to pipeline
-        for el in [dec, vqueue1, vconv, vscale, vcaps, overlay, venc, h264parse, vqueue2,
-                    asel, aconv, aresample, acaps, aenc, aqueue2, mux, sink]:
+        for el in [dec, vqueue1, vconv, vscale, vcaps, overlay, vtee, venc, h264parse, vqueue2,
+                    asel, aconv, aresample, acaps, aenc, aqueue2, mux, sink,
+                    pvq, pvrate, pvcaps, pvconv, pvenc, pvsink]:
             self.pipeline.add(el)
 
-        # Link video branch
-        Gst.Element.link_many(vqueue1, vconv, vscale, vcaps, overlay, venc, h264parse, vqueue2)
+        # Link video branch up to the tee
+        Gst.Element.link_many(vqueue1, vconv, vscale, vcaps, overlay, vtee)
+        # Tee has request pads — request one src pad per branch
+        tee_main_src = vtee.request_pad_simple("src_%u")
+        tee_main_src.link(venc.get_static_pad("sink"))
+        Gst.Element.link_many(venc, h264parse, vqueue2)
+        # Preview branch off the second tee src pad
+        tee_preview_src = vtee.request_pad_simple("src_%u")
+        tee_preview_src.link(pvq.get_static_pad("sink"))
+        Gst.Element.link_many(pvq, pvrate, pvcaps, pvconv, pvenc, pvsink)
         # Link audio branch: input-selector → convert → encode
         Gst.Element.link_many(asel, aconv, aresample, acaps, aenc, aqueue2)
         # Link to mux
         vqueue2.link(mux)
         aqueue2.link(mux)
         mux.link(sink)
+
+        # Hook the preview appsink callback
+        self._wire_preview_sink()
 
         # Handle dynamic pads from uridecodebin
         audio_pad_count = [0]

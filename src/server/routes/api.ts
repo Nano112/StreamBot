@@ -11,6 +11,27 @@ const router = Router();
 
 // ── Debug: live frame preview ────────────────────────────────────
 
+router.get('/debug/preview.jpg', (_req: Request, res: Response) => {
+	const streaming = getStreamingService();
+	const composer = streaming?.getComposer();
+	if (!composer) { res.status(503).type('text/plain').send('Composer not running'); return; }
+	const fs = require('fs') as typeof import('fs');
+	const previewPath = composer.getPreviewPath?.() as string | undefined;
+	if (!previewPath || !fs.existsSync(previewPath)) {
+		res.status(404).type('text/plain').send('No preview yet');
+		return;
+	}
+	try {
+		const buf = fs.readFileSync(previewPath);
+		res.setHeader('Content-Type', 'image/jpeg');
+		res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+		res.setHeader('Pragma', 'no-cache');
+		res.send(buf);
+	} catch (e: any) {
+		res.status(500).type('text/plain').send(e.message || 'Read failed');
+	}
+});
+
 router.get('/debug/frame.bmp', (req: Request, res: Response) => {
 	const streaming = getStreamingService();
 	const composer = streaming?.getComposer();
