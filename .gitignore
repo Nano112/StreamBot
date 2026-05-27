@@ -1,0 +1,12 @@
+LICENSE
+node_modules/
+dist/
+.env
+bun.lockb
+videos/
+tmp/
+*.sock
+cookies.txt
+data/
+.vscode/
+.gatherr-vc-history.json

@@ -1,0 +1,1283 @@
+<div class="container my-4" id="main-content">
+	<div class="d-flex justify-content-between align-items-center mb-4">
+		<h1 class="mb-0">Gatherr</h1>
+	</div>
+
+	<ul class="nav nav-tabs mb-3" id="mainTabs" role="tablist">
+		<li class="nav-item" role="presentation">
+			<button class="nav-link active" id="controls-tab" data-bs-toggle="tab" data-bs-target="#controls"
+				type="button" role="tab" aria-controls="controls" aria-selected="true">
+				<i class="fas fa-sliders-h me-1" aria-hidden="true"></i>Controls
+			</button>
+		</li>
+		<li class="nav-item" role="presentation">
+			<button class="nav-link" id="list-tab" data-bs-toggle="tab" data-bs-target="#list"
+				type="button" role="tab" aria-controls="list" aria-selected="false">
+				<i class="fas fa-folder me-1" aria-hidden="true"></i>Files
+			</button>
+		</li>
+		<li class="nav-item" role="presentation">
+			<button class="nav-link" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload"
+				type="button" role="tab" aria-controls="upload" aria-selected="false">
+				<i class="fas fa-upload me-1" aria-hidden="true"></i>Upload
+			</button>
+		</li>
+		<li class="nav-item" role="presentation" id="plexTabNav">
+			<button class="nav-link" id="plex-tab" data-bs-toggle="tab" data-bs-target="#plex"
+				type="button" role="tab" aria-controls="plex" aria-selected="false">
+				<i class="fas fa-server me-1" aria-hidden="true"></i>Plex
+			</button>
+		</li>
+		<li class="nav-item" role="presentation">
+			<button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs"
+				type="button" role="tab" aria-controls="logs" aria-selected="false">
+				<i class="fas fa-terminal me-1" aria-hidden="true"></i>Logs
+			</button>
+		</li>
+	</ul>
+
+	<div class="tab-content" id="mainTabContent">
+		<!-- Controls Tab -->
+		<div class="tab-pane fade show active" id="controls" role="tabpanel" aria-labelledby="controls-tab">
+
+			<!-- Status Bar -->
+			<div class="card mb-3">
+				<div class="card-body py-2">
+					<div class="d-flex justify-content-between align-items-center mb-2">
+						<div class="d-flex align-items-center">
+							<span id="statusDot" style="width:10px;height:10px;border-radius:50%;background:#dc3545;display:inline-block;margin-right:8px;"></span>
+							<span id="statusText" class="fw-semibold">Disconnected</span>
+						</div>
+						<div class="btn-group btn-group-sm">
+							<button class="btn btn-outline-success" id="joinBtn" onclick="botJoin()">
+								<i class="fas fa-phone me-1" aria-hidden="true"></i>Join
+							</button>
+							<button class="btn btn-outline-danger" id="leaveBtn" onclick="botLeave()" disabled>
+								<i class="fas fa-phone-slash me-1" aria-hidden="true"></i>Leave
+							</button>
+						</div>
+					</div>
+					<div class="row g-2">
+						<div class="col">
+							<input type="text" class="form-control form-control-sm" id="guildIdInput"
+								placeholder="Server ID" value="<%= typeof guildId !== 'undefined' ? guildId : '' %>">
+						</div>
+						<div class="col">
+							<input type="text" class="form-control form-control-sm" id="channelIdInput"
+								placeholder="Voice Channel ID" value="<%= typeof channelId !== 'undefined' ? channelId : '' %>">
+						</div>
+					</div>
+					<div class="input-group input-group-sm mt-2">
+						<input type="text" class="form-control" id="inviteInput"
+							placeholder="Discord invite link (discord.gg/xxx)"
+							onkeydown="if(event.key==='Enter')acceptInvite()">
+						<button class="btn btn-outline-primary" onclick="acceptInvite()" id="inviteBtn">
+							<i class="fas fa-envelope me-1" aria-hidden="true"></i>Join Server
+						</button>
+					</div>
+					<!-- Recent VCs -->
+					<div id="vcHistoryContainer" class="mt-2" style="display:none;">
+						<small class="text-muted d-block mb-1">Recent channels:</small>
+						<div id="vcHistoryList" class="d-flex flex-wrap gap-1"></div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Now Playing -->
+			<div class="card mb-3" id="nowPlayingCard" style="display:none;">
+				<div class="card-body py-3">
+					<div class="d-flex justify-content-between align-items-center">
+						<div class="d-flex align-items-center" style="min-width:0;">
+							<div class="me-3" style="flex-shrink:0;">
+								<div id="playingIndicator" class="spinner-grow spinner-grow-sm text-success" role="status" style="width:12px;height:12px;">
+									<span class="visually-hidden">Playing</span>
+								</div>
+							</div>
+							<div style="min-width:0;">
+								<small class="text-muted d-block" id="nowPlayingLabel">Now Playing</small>
+								<strong id="nowPlayingTitle" class="d-block text-truncate"></strong>
+							</div>
+						</div>
+						<div class="btn-group btn-group-sm ms-3" style="flex-shrink:0;">
+							<button class="btn btn-outline-secondary" id="pauseResumeBtn" onclick="togglePauseResume()" title="Pause">
+								<i class="fas fa-pause" id="pauseResumeIcon" aria-hidden="true"></i>
+							</button>
+							<button class="btn btn-outline-warning" onclick="botSkip()" title="Skip">
+								<i class="fas fa-forward" aria-hidden="true"></i>
+							</button>
+							<button class="btn btn-outline-danger" onclick="botStop()" title="Stop">
+								<i class="fas fa-stop" aria-hidden="true"></i>
+							</button>
+							<button class="btn btn-outline-info" id="overlayBtn" onclick="toggleOverlay()" title="Toggle stream overlay">
+								<i class="fas fa-closed-captioning" id="overlayIcon" aria-hidden="true"></i>
+							</button>
+						</div>
+					</div>
+					<!-- Progress Bar -->
+					<div class="mt-2" id="progressContainer" style="display:none;">
+						<div class="d-flex justify-content-between align-items-center mb-1">
+							<small class="text-muted" id="positionText">0:00</small>
+							<small class="text-muted" id="durationText">0:00</small>
+						</div>
+						<input type="range" class="form-range" id="seekSlider" min="0" max="100" value="0"
+							oninput="onSeekInput()" onchange="onSeekChange()">
+					</div>
+					<!-- Audio Track Selector -->
+					<div class="mt-2" id="audioTrackContainer" style="display:none;">
+						<div class="d-flex align-items-center gap-2">
+							<small class="text-muted" style="flex-shrink:0;"><i class="fas fa-volume-up me-1"></i>Audio</small>
+							<select class="form-select form-select-sm" id="audioTrackSelect" onchange="switchAudioTrack()">
+							</select>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Add Music -->
+			<div class="card mb-3">
+				<div class="card-body py-3">
+					<div class="input-group">
+						<input type="text" class="form-control" id="musicInput"
+							placeholder="YouTube URL, search query, or direct link..."
+							onkeydown="if(event.key==='Enter')addToQueue()">
+						<button class="btn btn-primary" onclick="addToQueue()" id="addBtn">
+							<i class="fas fa-plus me-1" aria-hidden="true"></i>Add
+						</button>
+					</div>
+				</div>
+			</div>
+
+			<!-- Queue -->
+			<div class="card">
+				<div class="card-header d-flex justify-content-between align-items-center py-2">
+					<h6 class="mb-0">Queue <span class="badge bg-secondary ms-1" id="queueCount">0</span></h6>
+					<button class="btn btn-outline-danger btn-sm" onclick="clearQueue()" id="clearQueueBtn" style="display:none;">
+						<i class="fas fa-trash me-1" aria-hidden="true"></i>Clear
+					</button>
+				</div>
+				<div class="card-body p-0">
+					<p class="text-muted text-center py-4 mb-0" id="emptyQueue">Queue is empty</p>
+					<ul class="list-group list-group-flush" id="queueList"></ul>
+				</div>
+			</div>
+		</div>
+
+		<!-- File List Tab -->
+		<div class="tab-pane fade" id="list" role="tabpanel" aria-labelledby="list-tab">
+			<div class="card">
+				<div class="card-header">
+					<h5 class="card-title mb-0">Video Files</h5>
+				</div>
+				<div class="card-body">
+					<div class="table-responsive">
+						<table class="table table-striped" role="table" aria-label="Video files list">
+							<thead>
+								<tr role="row">
+									<th scope="col" role="columnheader">Name</th>
+									<th scope="col" role="columnheader">Size</th>
+									<th scope="col" role="columnheader">Actions</th>
+								</tr>
+							</thead>
+							<tbody>
+								<% if (typeof files !== 'undefined' && files.length > 0) { %>
+									<% files.forEach(function(file) { %>
+									<tr>
+										<td><%= file.name %></td>
+										<td><%= file.size %></td>
+										<td>
+											<a href="/preview/<%= encodeURIComponent(file.name) %>" class="btn btn-sm btn-outline-primary me-1 btn-icon"
+											   aria-label="Preview <%= file.name %>" title="Preview">
+												<i class="fas fa-eye" aria-hidden="true"></i>
+											</a>
+											<button class="btn btn-sm btn-outline-secondary me-1 btn-icon"
+													onclick="copyFileName('<%= file.name %>')"
+													aria-label="Copy <%= file.name %>" title="Copy name">
+												<i class="fas fa-clipboard" aria-hidden="true"></i>
+											</button>
+											<button class="btn btn-sm btn-outline-success me-1 btn-icon"
+													onclick="playFile('<%= file.name %>')"
+													aria-label="Play <%= file.name %>" title="Add to queue">
+												<i class="fas fa-play" aria-hidden="true"></i>
+											</button>
+											<button class="btn btn-sm btn-outline-danger btn-icon"
+													aria-label="Delete <%= file.name %>" title="Delete"
+													onclick="showDeleteModal('<%= file.name %>', '/delete/<%= encodeURIComponent(file.name) %>')">
+												<i class="fas fa-trash" aria-hidden="true"></i>
+											</button>
+										</td>
+									</tr>
+									<% }); %>
+								<% } else { %>
+									<tr>
+										<td colspan="3" class="text-center text-muted">No video files found</td>
+									</tr>
+								<% } %>
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Upload Tab -->
+		<div class="tab-pane fade" id="upload" role="tabpanel" aria-labelledby="upload-tab">
+			<div class="row">
+				<div class="col-md-6 mb-3">
+					<div class="card">
+						<div class="card-header">
+							<h5 class="card-title mb-0">Upload</h5>
+						</div>
+						<div class="card-body">
+							<form action="/api/upload" method="post" enctype="multipart/form-data" id="localUploadForm">
+								<div class="mb-3">
+									<label for="localFileInput" class="form-label">Choose video file</label>
+									<input type="file" class="form-control" id="localFileInput" name="file" accept="video/*" required>
+								</div>
+								<div class="mb-3 d-none" id="localProgressContainer">
+									<label class="form-label">Upload Progress</label>
+									<div class="progress" style="height: 25px;">
+										<div class="progress-bar progress-bar-striped progress-bar-animated"
+											 id="localProgressBar" role="progressbar" style="width: 0%">
+											<span id="localProgressText">0%</span>
+										</div>
+									</div>
+									<small class="text-muted" id="localProgressStatus">Starting upload...</small>
+								</div>
+								<div class="d-flex gap-2">
+									<button type="button" class="btn btn-primary" id="localUploadBtn" onclick="startLocalUpload()">
+										<span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+										<i class="fas fa-upload me-1" aria-hidden="true"></i>Upload
+									</button>
+									<button type="button" class="btn btn-secondary d-none" id="localCancelBtn" onclick="cancelLocalUpload()">
+										<i class="fas fa-times me-1" aria-hidden="true"></i>Cancel
+									</button>
+								</div>
+							</form>
+						</div>
+					</div>
+				</div>
+				<div class="col-md-6 mb-3">
+					<div class="card">
+						<div class="card-header">
+							<h5 class="card-title mb-0">Remote Upload</h5>
+						</div>
+						<div class="card-body">
+							<form action="/api/remote_upload" method="post" enctype="multipart/form-data" id="remoteUploadForm">
+								<div class="mb-3">
+									<label for="remoteFileInput" class="form-label">Enter video URL</label>
+									<input type="url" class="form-control" id="remoteFileInput" name="link" placeholder="https://example.com/video.mp4" required>
+								</div>
+								<div class="mb-3 d-none" id="remoteProgressContainer">
+									<label class="form-label">Download Progress</label>
+									<div class="progress" style="height: 25px;">
+										<div class="progress-bar progress-bar-striped progress-bar-animated bg-info"
+											 id="remoteProgressBar" role="progressbar" style="width: 0%">
+											<span id="remoteProgressText">0%</span>
+										</div>
+									</div>
+									<small class="text-muted" id="remoteProgressStatus">Starting download...</small>
+								</div>
+								<div class="d-flex gap-2">
+									<button type="button" class="btn btn-primary" id="remoteUploadBtn" onclick="startRemoteUpload()">
+										<span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+										<i class="fas fa-download me-1" aria-hidden="true"></i>Download
+									</button>
+									<button type="button" class="btn btn-secondary d-none" id="remoteCancelBtn" onclick="cancelRemoteUpload()">
+										<i class="fas fa-times me-1" aria-hidden="true"></i>Cancel
+									</button>
+								</div>
+							</form>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Plex Tab -->
+		<div class="tab-pane fade" id="plex" role="tabpanel" aria-labelledby="plex-tab">
+
+			<!-- Plex Auth Panel -->
+			<div class="card mb-3" id="plexAuthPanel">
+				<div class="card-body" id="plexAuthBody">
+					<p class="text-muted mb-0">Loading Plex status…</p>
+				</div>
+			</div>
+
+			<!-- Plex Ready Content (search + browse, only shown when authenticated) -->
+			<div id="plexReadyContent" style="display:none;">
+			<div class="card mb-3">
+				<div class="card-body py-3">
+					<div class="input-group">
+						<input type="text" class="form-control" id="plexSearchInput"
+							placeholder="Search Plex library..."
+							onkeydown="if(event.key==='Enter')searchPlex()">
+						<button class="btn btn-primary" onclick="searchPlex()" id="plexSearchBtn">
+							<i class="fas fa-search me-1" aria-hidden="true"></i>Search
+						</button>
+					</div>
+				</div>
+			</div>
+
+			<!-- Plex Search Results -->
+			<div class="card mb-3" id="plexSearchResults" style="display:none;">
+				<div class="card-header py-2">
+					<h6 class="mb-0">Search Results</h6>
+				</div>
+				<div class="card-body p-0">
+					<ul class="list-group list-group-flush" id="plexSearchList"></ul>
+				</div>
+			</div>
+
+			<!-- Plex Browse -->
+			<div class="card">
+				<div class="card-header d-flex justify-content-between align-items-center py-2">
+					<h6 class="mb-0" id="plexBrowseTitle">Libraries</h6>
+					<button class="btn btn-outline-secondary btn-sm" onclick="plexBrowseBack()" id="plexBackBtn" style="display:none;">
+						<i class="fas fa-arrow-left me-1" aria-hidden="true"></i>Back
+					</button>
+				</div>
+				<div class="card-body p-0">
+					<p class="text-muted text-center py-4 mb-0" id="plexEmpty">Loading...</p>
+					<ul class="list-group list-group-flush" id="plexBrowseList"></ul>
+				</div>
+			</div>
+			</div>
+		</div>
+
+		<!-- Logs Tab -->
+		<div class="tab-pane fade" id="logs" role="tabpanel" aria-labelledby="logs-tab">
+			<div class="card">
+				<div class="card-header d-flex justify-content-between align-items-center py-2">
+					<h6 class="mb-0"><i class="fas fa-terminal me-1"></i>Live Logs</h6>
+					<div>
+						<label class="form-check-label me-2" for="autoScrollCheck" style="font-size:0.85rem;">Auto-scroll</label>
+						<input class="form-check-input" type="checkbox" id="autoScrollCheck" checked>
+						<button class="btn btn-outline-secondary btn-sm ms-2" onclick="clearLogsView()">Clear</button>
+					</div>
+				</div>
+				<div class="card-body p-0">
+					<pre id="logsOutput" style="height:450px;overflow-y:auto;margin:0;padding:12px;font-size:0.8rem;background:#1e1e1e;color:#d4d4d4;border:none;border-radius:0 0 0.375rem 0.375rem;white-space:pre-wrap;word-break:break-all;"></pre>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Delete Confirmation Modal -->
+	<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="deleteModalLabel">
+						<i class="fas fa-exclamation-triangle text-warning me-2" aria-hidden="true"></i>
+						Confirm Deletion
+					</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="margin: 0;"></button>
+				</div>
+				<div class="modal-body">
+					<div class="text-center mb-3">
+						<i class="fas fa-trash text-danger fa-3x mb-3" aria-hidden="true"></i>
+						<h6 class="mb-3">Are you sure you want to delete this video file?</h6>
+						<p class="mb-2 text-muted">
+							<strong id="deleteFileName"></strong>
+						</p>
+						<small class="text-muted">This action cannot be undone.</small>
+					</div>
+				</div>
+				<div class="modal-footer justify-content-center">
+					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+						<i class="fas fa-times me-1" aria-hidden="true"></i>Cancel
+					</button>
+					<a id="confirmDeleteBtn" href="#" class="btn btn-danger">
+						<i class="fas fa-trash me-1" aria-hidden="true"></i>Delete File
+					</a>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<script>
+// --- Bot Controls ---
+let pollTimer;
+let isSeeking = false;
+
+function startPolling() {
+	refreshStatus();
+	pollTimer = setInterval(refreshStatus, 1000);
+}
+
+function escapeHtml(text) {
+	const div = document.createElement('div');
+	div.textContent = text;
+	return div.innerHTML;
+}
+
+function formatTime(seconds) {
+	if (!seconds || seconds < 0) return '0:00';
+	const h = Math.floor(seconds / 3600);
+	const m = Math.floor((seconds % 3600) / 60);
+	const s = Math.floor(seconds % 60);
+	if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+	return m + ':' + String(s).padStart(2, '0');
+}
+
+async function refreshStatus() {
+	try {
+		const res = await fetch('/api/bot/status');
+		if (!res.ok) return;
+		const data = await res.json();
+		updateBotUI(data);
+	} catch (e) {
+		// silently ignore polling errors
+	}
+}
+
+function updateBotUI(data) {
+	const dot = document.getElementById('statusDot');
+	const text = document.getElementById('statusText');
+	const joinBtn = document.getElementById('joinBtn');
+	const leaveBtn = document.getElementById('leaveBtn');
+
+	if (data.joined) {
+		dot.style.background = '#198754';
+		text.textContent = 'Connected';
+		joinBtn.disabled = true;
+		leaveBtn.disabled = false;
+	} else {
+		dot.style.background = '#dc3545';
+		text.textContent = 'Disconnected';
+		joinBtn.disabled = false;
+		leaveBtn.disabled = true;
+	}
+
+	// Now Playing
+	const npCard = document.getElementById('nowPlayingCard');
+	const npTitle = document.getElementById('nowPlayingTitle');
+	const npLabel = document.getElementById('nowPlayingLabel');
+	const indicator = document.getElementById('playingIndicator');
+	const pauseBtn = document.getElementById('pauseResumeBtn');
+	const pauseIcon = document.getElementById('pauseResumeIcon');
+	const progressContainer = document.getElementById('progressContainer');
+
+	if ((data.playing || data.paused) && data.currentTrack) {
+		npCard.style.display = '';
+		npTitle.textContent = data.currentTrack.title;
+
+		if (data.paused) {
+			npLabel.textContent = 'Paused';
+			indicator.classList.remove('text-success');
+			indicator.classList.add('text-warning');
+			indicator.classList.remove('spinner-grow');
+			indicator.innerHTML = '<i class="fas fa-pause" style="font-size:12px;"></i>';
+			pauseIcon.className = 'fas fa-play';
+			pauseBtn.title = 'Resume';
+		} else {
+			npLabel.textContent = 'Now Playing';
+			indicator.classList.add('text-success');
+			indicator.classList.remove('text-warning');
+			indicator.classList.add('spinner-grow');
+			indicator.innerHTML = '<span class="visually-hidden">Playing</span>';
+			pauseIcon.className = 'fas fa-pause';
+			pauseBtn.title = 'Pause';
+		}
+
+		// Progress bar
+		const pb = data.playback;
+		if (pb && pb.duration && pb.duration > 0) {
+			progressContainer.style.display = '';
+			if (!isSeeking) {
+				const slider = document.getElementById('seekSlider');
+				slider.max = pb.duration;
+				slider.value = pb.position || 0;
+				document.getElementById('positionText').textContent = formatTime(pb.position);
+				const remaining = pb.duration - (pb.position || 0);
+				document.getElementById('durationText').textContent = `-${formatTime(remaining)} / ${formatTime(pb.duration)}`;
+			}
+			document.getElementById('seekSlider').disabled = false;
+		} else {
+			progressContainer.style.display = 'none';
+		}
+
+		// Audio track selector
+		const atContainer = document.getElementById('audioTrackContainer');
+		const atSelect = document.getElementById('audioTrackSelect');
+		const tracks = pb?.audioTracks || [];
+		if (tracks.length > 1) {
+			atContainer.style.display = '';
+			// Only rebuild options if track count changed
+			if (atSelect.options.length !== tracks.length) {
+				const currentVal = atSelect.value;
+				atSelect.innerHTML = tracks.map(t =>
+					`<option value="${t.index}">${t.language}${t.title ? ' — ' + escapeHtml(t.title) : ''} (${t.codec} ${t.channels}ch)</option>`
+				).join('');
+				if (currentVal && atSelect.querySelector(`option[value="${currentVal}"]`)) {
+					atSelect.value = currentVal;
+				}
+			}
+		} else {
+			atContainer.style.display = 'none';
+		}
+	} else {
+		npCard.style.display = 'none';
+	}
+
+	// Queue
+	const queueCount = document.getElementById('queueCount');
+	const queueList = document.getElementById('queueList');
+	const emptyQueue = document.getElementById('emptyQueue');
+	const clearBtn = document.getElementById('clearQueueBtn');
+
+	const upcoming = data.queue.filter(item =>
+		!data.currentTrack || item.id !== data.currentTrack.id
+	);
+
+	queueCount.textContent = upcoming.length;
+
+	if (upcoming.length === 0) {
+		emptyQueue.style.display = '';
+		queueList.innerHTML = '';
+		clearBtn.style.display = 'none';
+	} else {
+		emptyQueue.style.display = 'none';
+		clearBtn.style.display = '';
+		queueList.innerHTML = upcoming.map((item, i) => `
+			<li class="list-group-item d-flex justify-content-between align-items-center">
+				<div class="d-flex align-items-center" style="min-width:0;">
+					<span class="badge bg-secondary me-2">${i + 1}</span>
+					<div style="min-width:0;">
+						<span class="text-truncate d-block">${escapeHtml(item.title)}</span>
+						${item.duration ? '<small class="text-muted">' + formatTime(item.duration) + '</small>' : ''}
+					</div>
+				</div>
+				<button class="btn btn-outline-danger btn-sm ms-2" onclick="removeFromQueue('${escapeHtml(item.id)}')" style="flex-shrink:0;">
+					<i class="fas fa-times" aria-hidden="true"></i>
+				</button>
+			</li>
+		`).join('');
+	}
+}
+
+// --- Seek ---
+function onSeekInput() {
+	isSeeking = true;
+	const slider = document.getElementById('seekSlider');
+	document.getElementById('positionText').textContent = formatTime(parseFloat(slider.value));
+}
+
+async function onSeekChange() {
+	const slider = document.getElementById('seekSlider');
+	const seconds = parseFloat(slider.value);
+	isSeeking = false;
+
+	try {
+		await fetch('/api/bot/seek', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ seconds })
+		});
+	} catch (e) {
+		showErrorToast('Failed to seek');
+	}
+}
+
+// --- Pause / Resume ---
+async function switchAudioTrack() {
+	const select = document.getElementById('audioTrackSelect');
+	const index = parseInt(select.value);
+	try {
+		const res = await fetch('/api/bot/audio-track', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ index })
+		});
+		const data = await res.json();
+		if (data.success) {
+			showSuccessToast(`Audio track switched`, 'Audio');
+		} else {
+			showErrorToast(data.error || 'Failed to switch audio');
+		}
+	} catch (e) {
+		showErrorToast('Failed to switch audio track');
+	}
+}
+
+async function togglePauseResume() {
+	const icon = document.getElementById('pauseResumeIcon');
+	const isPaused = icon.className.includes('fa-play');
+
+	try {
+		const endpoint = isPaused ? '/api/bot/resume' : '/api/bot/pause';
+		const res = await fetch(endpoint, { method: 'POST' });
+		const data = await res.json();
+		if (!data.success && data.error) {
+			showErrorToast(data.error);
+		}
+	} catch (e) {
+		showErrorToast('Failed to toggle pause');
+	}
+	refreshStatus();
+}
+
+let overlayEnabled = true;
+async function toggleOverlay() {
+	overlayEnabled = !overlayEnabled;
+	try {
+		await fetch('/api/bot/overlay', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ enabled: overlayEnabled })
+		});
+		const btn = document.getElementById('overlayBtn');
+		btn.classList.toggle('active', overlayEnabled);
+		btn.title = overlayEnabled ? 'Hide stream overlay' : 'Show stream overlay';
+	} catch (e) {
+		showErrorToast('Failed to toggle overlay');
+	}
+}
+
+async function botJoin() {
+	const btn = document.getElementById('joinBtn');
+	const guildId = document.getElementById('guildIdInput').value.trim();
+	const channelId = document.getElementById('channelIdInput').value.trim();
+
+	btn.disabled = true;
+	btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Joining...';
+	try {
+		const body = {};
+		if (guildId) body.guildId = guildId;
+		if (channelId) body.channelId = channelId;
+
+		const res = await fetch('/api/bot/join', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(body)
+		});
+		const data = await res.json();
+		if (data.success) {
+			showSuccessToast('Joined voice channel', 'Connected');
+			loadVCHistory();
+		} else {
+			showErrorToast(data.error || 'Failed to join');
+		}
+	} catch (e) {
+		showErrorToast('Failed to join voice channel');
+	}
+	btn.innerHTML = '<i class="fas fa-phone me-1"></i>Join';
+	btn.disabled = false;
+	refreshStatus();
+}
+
+async function botLeave() {
+	try {
+		const res = await fetch('/api/bot/leave', { method: 'POST' });
+		const data = await res.json();
+		if (data.success) {
+			showSuccessToast('Left voice channel', 'Disconnected');
+		} else {
+			showErrorToast(data.error || 'Failed to leave');
+		}
+	} catch (e) {
+		showErrorToast('Failed to leave');
+	}
+	refreshStatus();
+}
+
+async function addToQueue() {
+	const input = document.getElementById('musicInput');
+	const url = input.value.trim();
+	if (!url) {
+		showWarningToast('Enter a URL or search query', 'Missing Input');
+		return;
+	}
+
+	const btn = document.getElementById('addBtn');
+	btn.disabled = true;
+	btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+	try {
+		const res = await fetch('/api/bot/queue/add', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ url })
+		});
+		const data = await res.json();
+		if (data.success) {
+			input.value = '';
+			const msg = data.autoPlaying
+				? `Now playing: ${data.item.title}`
+				: `Added: ${data.item.title}`;
+			showSuccessToast(msg, data.autoPlaying ? 'Playing' : 'Queued');
+		} else {
+			showErrorToast(data.error || 'Failed to add');
+		}
+	} catch (e) {
+		showErrorToast('Failed to add to queue');
+	}
+
+	btn.disabled = false;
+	btn.innerHTML = '<i class="fas fa-plus me-1"></i>Add';
+	refreshStatus();
+}
+
+async function playFile(fileName) {
+	try {
+		const res = await fetch('/api/bot/queue/add', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ url: fileName })
+		});
+		const data = await res.json();
+		if (data.success) {
+			const msg = data.autoPlaying
+				? `Now playing: ${data.item.title}`
+				: `Added: ${data.item.title}`;
+			showSuccessToast(msg, data.autoPlaying ? 'Playing' : 'Queued');
+			const controlsTab = document.getElementById('controls-tab');
+			if (controlsTab) bootstrap.Tab.getOrCreateInstance(controlsTab).show();
+		} else {
+			showErrorToast(data.error || 'Failed to play file');
+		}
+	} catch (e) {
+		showErrorToast('Failed to play file');
+	}
+	refreshStatus();
+}
+
+async function botSkip() {
+	try {
+		const res = await fetch('/api/bot/skip', { method: 'POST' });
+		const data = await res.json();
+		if (data.success) {
+			showInfoToast(data.nextTitle ? `Skipped. Next: ${data.nextTitle}` : 'Skipped. Queue empty.', 'Skipped');
+		} else {
+			showErrorToast(data.error || 'Failed to skip');
+		}
+	} catch (e) {
+		showErrorToast('Failed to skip');
+	}
+	refreshStatus();
+}
+
+async function botStop() {
+	try {
+		const res = await fetch('/api/bot/stop', { method: 'POST' });
+		const data = await res.json();
+		if (data.success) {
+			showInfoToast('Playback stopped', 'Stopped');
+		} else {
+			showErrorToast(data.error || 'Failed to stop');
+		}
+	} catch (e) {
+		showErrorToast('Failed to stop');
+	}
+	refreshStatus();
+}
+
+async function removeFromQueue(id) {
+	try {
+		const res = await fetch(`/api/bot/queue/${encodeURIComponent(id)}`, { method: 'DELETE' });
+		const data = await res.json();
+		if (data.success) {
+			showSuccessToast('Removed from queue', 'Removed');
+		}
+	} catch (e) {
+		showErrorToast('Failed to remove');
+	}
+	refreshStatus();
+}
+
+async function clearQueue() {
+	try {
+		const res = await fetch('/api/bot/queue/clear', { method: 'POST' });
+		const data = await res.json();
+		if (data.success) {
+			showInfoToast('Queue cleared', 'Cleared');
+		}
+	} catch (e) {
+		showErrorToast('Failed to clear queue');
+	}
+	refreshStatus();
+}
+
+async function acceptInvite() {
+	const input = document.getElementById('inviteInput');
+	const invite = input.value.trim();
+	if (!invite) {
+		showWarningToast('Enter a Discord invite link', 'Missing Invite');
+		return;
+	}
+
+	const btn = document.getElementById('inviteBtn');
+	btn.disabled = true;
+	btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+	try {
+		const res = await fetch('/api/bot/invite', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ invite })
+		});
+		const data = await res.json();
+		if (data.success) {
+			input.value = '';
+			showSuccessToast(`Joined server: ${data.guildName}`, 'Server Joined');
+			if (data.guildId) {
+				document.getElementById('guildIdInput').value = data.guildId;
+			}
+		} else {
+			showErrorToast(data.error || 'Failed to join server');
+		}
+	} catch (e) {
+		showErrorToast('Failed to accept invite');
+	}
+
+	btn.disabled = false;
+	btn.innerHTML = '<i class="fas fa-envelope me-1"></i>Join Server';
+}
+
+// --- Plex ---
+let plexAuthPollHandle = null;
+
+function plexRenderAuth(status) {
+	const body = document.getElementById('plexAuthBody');
+	const readyContent = document.getElementById('plexReadyContent');
+
+	switch (status.state) {
+		case 'idle':
+			body.innerHTML = `
+				<div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+					<div>
+						<strong>Plex is not signed in.</strong>
+						<div class="text-muted small">Click sign in to link your Plex account.</div>
+					</div>
+					<button class="btn btn-primary" id="plexSignInBtn">
+						<i class="fas fa-sign-in-alt me-1"></i>Sign in to Plex
+					</button>
+				</div>
+			`;
+			document.getElementById('plexSignInBtn').addEventListener('click', plexStartSignIn);
+			readyContent.style.display = 'none';
+			break;
+		case 'awaiting-pin':
+			body.innerHTML = `
+				<div class="text-center">
+					<div class="text-muted small mb-2">Go to <strong>plex.tv/link</strong> and enter:</div>
+					<div class="display-4 font-monospace mb-3" style="letter-spacing:0.4em;">${escapeHtml(status.code || '')}</div>
+					<a class="btn btn-primary me-2" href="https://plex.tv/link" target="_blank" rel="noopener">
+						<i class="fas fa-external-link-alt me-1"></i>Open plex.tv/link
+					</a>
+					<button class="btn btn-outline-secondary" id="plexCancelBtn">Cancel</button>
+				</div>
+			`;
+			document.getElementById('plexCancelBtn').addEventListener('click', plexCancelSignIn);
+			readyContent.style.display = 'none';
+			break;
+		case 'pin-expired':
+			body.innerHTML = `
+				<div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+					<div class="text-danger"><strong>Code expired.</strong> Start a new sign-in to try again.</div>
+					<button class="btn btn-primary" id="plexSignInBtn">Sign in to Plex</button>
+				</div>
+			`;
+			document.getElementById('plexSignInBtn').addEventListener('click', plexStartSignIn);
+			readyContent.style.display = 'none';
+			break;
+		case 'linked':
+			plexRenderServerPicker(status);
+			readyContent.style.display = 'none';
+			break;
+		case 'ready':
+			body.innerHTML = `
+				<div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+					<div>
+						<i class="fas fa-check-circle text-success me-1"></i>
+						Signed in as <strong>${escapeHtml(status.accountUser || 'unknown')}</strong>
+						<span class="text-muted"> &middot; ${escapeHtml(status.serverName || 'server')}</span>
+					</div>
+					<button class="btn btn-outline-danger btn-sm" id="plexSignOutBtn">Sign out</button>
+				</div>
+			`;
+			document.getElementById('plexSignOutBtn').addEventListener('click', plexSignOut);
+			readyContent.style.display = '';
+			break;
+		default:
+			body.innerHTML = `<div class="text-muted">Unknown state: ${escapeHtml(status.state)}</div>`;
+			readyContent.style.display = 'none';
+	}
+
+	if (status.reason === 'token-rejected') {
+		showErrorToast('Plex rejected the stored token. Please sign in again.');
+	}
+}
+
+function plexRenderServerPicker(status) {
+	const body = document.getElementById('plexAuthBody');
+	const servers = status.servers || [];
+	if (servers.length === 0) {
+		body.innerHTML = `
+			<div>
+				<strong>Signed in</strong> — no servers discovered yet.
+				<button class="btn btn-outline-secondary btn-sm ms-2" id="plexRefreshSrvBtn">Retry</button>
+			</div>
+		`;
+		document.getElementById('plexRefreshSrvBtn').addEventListener('click', refreshPlexAuth);
+		return;
+	}
+	const opts = servers.map((s, i) =>
+		`<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}${s.owned ? '' : ' (shared)'}</option>`
+	).join('');
+	body.innerHTML = `
+		<div class="row g-2 align-items-end">
+			<div class="col-md">
+				<label class="form-label small mb-1">Server</label>
+				<select class="form-select" id="plexServerSelect">${opts}</select>
+			</div>
+			<div class="col-md">
+				<label class="form-label small mb-1">Connection</label>
+				<select class="form-select" id="plexConnectionSelect"></select>
+			</div>
+			<div class="col-md-auto">
+				<button class="btn btn-primary" id="plexUseServerBtn">Use this server</button>
+			</div>
+		</div>
+		<div class="text-muted small mt-2">Picked automatically if you don't change the connection.</div>
+	`;
+	const serverSel = document.getElementById('plexServerSelect');
+	const connSel = document.getElementById('plexConnectionSelect');
+	function refreshConns() {
+		const srv = servers.find(s => s.id === serverSel.value);
+		const conns = srv ? srv.connections : [];
+		connSel.innerHTML = conns.map(c =>
+			`<option value="${escapeHtml(c.uri)}">${escapeHtml(c.uri)}${c.local ? ' (local)' : ''}${c.relay ? ' (relay)' : ''}</option>`
+		).join('');
+	}
+	serverSel.addEventListener('change', refreshConns);
+	refreshConns();
+	document.getElementById('plexUseServerBtn').addEventListener('click', async () => {
+		const id = serverSel.value;
+		const connectionUri = connSel.value || undefined;
+		try {
+			const r = await fetch('/api/plex/auth/select-server', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id, connectionUri }),
+			});
+			if (!r.ok) {
+				const data = await r.json().catch(() => ({}));
+				showErrorToast(data.error || `Failed (${r.status})`);
+				return;
+			}
+			refreshPlexAuth();
+		} catch (e) {
+			showErrorToast('Failed to select server');
+		}
+	});
+}
+
+async function refreshPlexAuth() {
+	try {
+		const r = await fetch('/api/plex/auth/status');
+		if (!r.ok) return;
+		const status = await r.json();
+		plexRenderAuth(status);
+		if (status.state === 'awaiting-pin') {
+			if (!plexAuthPollHandle) {
+				plexAuthPollHandle = setInterval(() => {
+					if (document.hidden) return;
+					refreshPlexAuth();
+				}, 2000);
+			}
+		} else if (plexAuthPollHandle) {
+			clearInterval(plexAuthPollHandle);
+			plexAuthPollHandle = null;
+		}
+	} catch (e) {
+		// Network blip — try again on next refresh
+	}
+}
+
+async function plexStartSignIn() {
+	try {
+		const r = await fetch('/api/plex/auth/start', { method: 'POST' });
+		if (!r.ok) {
+			const data = await r.json().catch(() => ({}));
+			showErrorToast(data.error || `Failed (${r.status})`);
+			return;
+		}
+		refreshPlexAuth();
+	} catch (e) {
+		showErrorToast('Failed to start sign in');
+	}
+}
+
+async function plexCancelSignIn() {
+	try {
+		await fetch('/api/plex/auth/cancel', { method: 'POST' });
+		refreshPlexAuth();
+	} catch (e) {
+		// ignore
+	}
+}
+
+async function plexSignOut() {
+	try {
+		await fetch('/api/plex/auth/logout', { method: 'POST' });
+		refreshPlexAuth();
+	} catch (e) {
+		// ignore
+	}
+}
+
+let plexBrowseHistory = []; // Stack of { path, title } objects
+
+async function browsePlex(path) {
+	const list = document.getElementById('plexBrowseList');
+	const empty = document.getElementById('plexEmpty');
+	const title = document.getElementById('plexBrowseTitle');
+	const backBtn = document.getElementById('plexBackBtn');
+
+	empty.style.display = '';
+	empty.textContent = 'Loading...';
+	list.innerHTML = '';
+
+	try {
+		const url = path ? `/api/plex/browse?path=${encodeURIComponent(path)}` : '/api/plex/browse';
+		const res = await fetch(url);
+		const data = await res.json();
+
+		if (!data.items || data.items.length === 0) {
+			empty.textContent = 'No items found';
+			return;
+		}
+
+		empty.style.display = 'none';
+		title.textContent = data.title || (path ? `Browsing` : 'Libraries');
+		backBtn.style.display = plexBrowseHistory.length > 0 ? '' : 'none';
+
+		list.innerHTML = data.items.map(item => {
+			const icon = item.type === 'library' ? 'fa-film' : item.type === 'folder' ? 'fa-folder' : 'fa-play-circle';
+			const duration = item.duration ? formatTime(item.duration) : '';
+			const year = item.year ? `(${item.year})` : '';
+			const thumb = item.thumbnailUrl
+				? `<img src="${escapeHtml(item.thumbnailUrl)}" style="width:45px;height:65px;object-fit:cover;border-radius:4px;margin-right:10px;flex-shrink:0;" onerror="this.style.display='none'">`
+				: '';
+
+			if (item.type === 'media') {
+				return `<li class="list-group-item d-flex align-items-center py-2">
+					${thumb}
+					<div style="min-width:0;flex:1;">
+						<div class="text-truncate fw-semibold">${escapeHtml(item.title)}</div>
+						<small class="text-muted">${[year, duration].filter(Boolean).join(' · ')}</small>
+					</div>
+					<button class="btn btn-outline-success btn-sm ms-2" onclick="plexQueue('${escapeHtml(item.id)}')" style="flex-shrink:0;">
+						<i class="fas fa-play me-1"></i>Play
+					</button>
+				</li>`;
+			} else {
+				return `<li class="list-group-item d-flex align-items-center py-2" style="cursor:pointer;" onclick="plexNavigate('${escapeHtml(item.id)}')">
+					<i class="fas ${icon} me-2 text-secondary fa-lg"></i>
+					<span class="text-truncate fw-semibold">${escapeHtml(item.title)}</span>
+					<i class="fas fa-chevron-right ms-auto text-muted"></i>
+				</li>`;
+			}
+		}).join('');
+	} catch (e) {
+		empty.textContent = 'Failed to load';
+	}
+}
+
+function plexNavigate(path) {
+	// Save current path so we can go back
+	const currentTitle = document.getElementById('plexBrowseTitle').textContent;
+	const currentPath = plexBrowseHistory.length > 0 ? plexBrowseHistory[plexBrowseHistory.length - 1]?.nextPath : null;
+	plexBrowseHistory.push({ path: currentPath, title: currentTitle, nextPath: path });
+	browsePlex(path);
+}
+
+function plexBrowseBack() {
+	if (plexBrowseHistory.length === 0) return;
+	const prev = plexBrowseHistory.pop();
+	browsePlex(prev?.path || undefined);
+}
+
+async function searchPlex() {
+	const input = document.getElementById('plexSearchInput');
+	const query = input.value.trim();
+	if (!query) return;
+
+	const resultsCard = document.getElementById('plexSearchResults');
+	const list = document.getElementById('plexSearchList');
+	resultsCard.style.display = '';
+	list.innerHTML = '<li class="list-group-item text-center text-muted">Searching...</li>';
+
+	try {
+		const res = await fetch(`/api/plex/search?q=${encodeURIComponent(query)}`);
+		const data = await res.json();
+
+		if (!data.results || data.results.length === 0) {
+			list.innerHTML = '<li class="list-group-item text-center text-muted">No results found</li>';
+			return;
+		}
+
+		list.innerHTML = data.results.map(item => {
+			const duration = item.duration ? formatTime(item.duration) : '';
+			const isBrowsable = item.url.startsWith('plex-browse:');
+			const id = item.url.replace('plex:', '').replace('plex-browse:', '');
+			const thumb = item.thumbnailUrl
+				? `<img src="${escapeHtml(item.thumbnailUrl)}" style="width:45px;height:65px;object-fit:cover;border-radius:4px;margin-right:10px;flex-shrink:0;" onerror="this.style.display='none'">`
+				: '';
+			const actionBtn = isBrowsable
+				? `<button class="btn btn-outline-primary btn-sm ms-2" onclick="plexNavigate('${escapeHtml(id)}')" style="flex-shrink:0;">
+					<i class="fas fa-folder-open me-1"></i>Browse
+				</button>`
+				: `<button class="btn btn-outline-success btn-sm ms-2" onclick="plexQueue('${escapeHtml(id)}')" style="flex-shrink:0;">
+					<i class="fas fa-play me-1"></i>Play
+				</button>`;
+			return `<li class="list-group-item d-flex align-items-center py-2">
+				${thumb}
+				<div style="min-width:0;flex:1;">
+					<div class="text-truncate fw-semibold">${escapeHtml(item.title)}</div>
+					${duration ? `<small class="text-muted">${duration}</small>` : ''}
+				</div>
+				${actionBtn}
+			</li>`;
+		}).join('');
+	} catch (e) {
+		list.innerHTML = '<li class="list-group-item text-center text-danger">Search failed</li>';
+	}
+}
+
+async function plexQueue(itemId) {
+	try {
+		const res = await fetch('/api/plex/queue', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ itemId })
+		});
+		const data = await res.json();
+		if (data.success) {
+			const msg = data.autoPlaying ? `Now playing: ${data.item.title}` : `Added: ${data.item.title}`;
+			showSuccessToast(msg, data.autoPlaying ? 'Playing' : 'Queued');
+			const controlsTab = document.getElementById('controls-tab');
+			if (controlsTab) bootstrap.Tab.getOrCreateInstance(controlsTab).show();
+		} else {
+			showErrorToast(data.error || 'Failed to queue');
+		}
+	} catch (e) {
+		showErrorToast('Failed to queue Plex item');
+	}
+	refreshStatus();
+}
+
+// Init Plex tab
+document.getElementById('plex-tab')?.addEventListener('shown.bs.tab', () => {
+	refreshPlexAuth();
+	if (document.getElementById('plexReadyContent').style.display !== 'none') {
+		browsePlex();
+	}
+});
+
+// --- Logs ---
+let logTotal = 0;
+let logsActive = false;
+let logPollTimer;
+
+function startLogPolling() {
+	if (logsActive) return;
+	logsActive = true;
+	fetchLogs();
+	logPollTimer = setInterval(fetchLogs, 2000);
+}
+
+function stopLogPolling() {
+	logsActive = false;
+	if (logPollTimer) clearInterval(logPollTimer);
+}
+
+function getLevelColor(level) {
+	if (level.includes('error')) return '#f44747';
+	if (level.includes('warn')) return '#cca700';
+	if (level.includes('info')) return '#6a9955';
+	if (level.includes('debug')) return '#569cd6';
+	return '#d4d4d4';
+}
+
+async function fetchLogs() {
+	try {
+		const res = await fetch(`/api/bot/logs?since=${logTotal}`);
+		if (!res.ok) return;
+		const data = await res.json();
+		if (data.logs.length === 0) return;
+
+		const output = document.getElementById('logsOutput');
+		const autoScroll = document.getElementById('autoScrollCheck').checked;
+
+		data.logs.forEach(entry => {
+			const line = document.createElement('div');
+			const color = getLevelColor(entry.level);
+			line.innerHTML = `<span style="color:#858585">[${escapeHtml(entry.timestamp)}]</span> <span style="color:${color}">${escapeHtml(entry.level)}</span>: ${escapeHtml(entry.message)}`;
+			output.appendChild(line);
+		});
+
+		logTotal = data.total;
+
+		while (output.children.length > 500) {
+			output.removeChild(output.firstChild);
+		}
+
+		if (autoScroll) {
+			output.scrollTop = output.scrollHeight;
+		}
+	} catch (e) {
+		// ignore
+	}
+}
+
+function clearLogsView() {
+	const output = document.getElementById('logsOutput');
+	output.innerHTML = '';
+}
+
+// Start/stop log polling based on tab visibility
+document.getElementById('logs-tab')?.addEventListener('shown.bs.tab', startLogPolling);
+document.getElementById('logs-tab')?.addEventListener('hidden.bs.tab', stopLogPolling);
+
+// --- VC History ---
+async function loadVCHistory() {
+	try {
+		const res = await fetch('/api/bot/vc-history');
+		if (!res.ok) return;
+		const data = await res.json();
+		const container = document.getElementById('vcHistoryContainer');
+		const list = document.getElementById('vcHistoryList');
+		if (!data.entries || data.entries.length === 0) {
+			container.style.display = 'none';
+			return;
+		}
+		container.style.display = '';
+		list.innerHTML = data.entries.map(e => {
+			const icon = e.guildIcon
+				? `<img src="${escapeHtml(e.guildIcon)}" width="16" height="16" class="rounded-circle me-1" style="object-fit:cover;" onerror="this.style.display='none'">`
+				: '<i class="fas fa-server me-1" style="font-size:12px;"></i>';
+			return `<button class="btn btn-outline-secondary btn-sm d-flex align-items-center"
+				onclick="quickJoinVC('${escapeHtml(e.guildId)}','${escapeHtml(e.channelId)}')"
+				title="${escapeHtml(e.guildName)} / ${escapeHtml(e.channelName)}">
+				${icon}<span class="text-truncate" style="max-width:120px;">${escapeHtml(e.guildName)}</span>
+				<small class="text-muted ms-1">#${escapeHtml(e.channelName)}</small>
+			</button>`;
+		}).join('');
+	} catch (e) {}
+}
+
+function quickJoinVC(guildId, channelId) {
+	document.getElementById('guildIdInput').value = guildId;
+	document.getElementById('channelIdInput').value = channelId;
+	botJoin();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+	startPolling();
+	refreshPlexAuth();
+	loadVCHistory();
+});
+</script>
