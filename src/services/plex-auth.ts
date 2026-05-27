@@ -40,6 +40,10 @@ export interface DiscoveredServer {
 	name: string;
 	owned: boolean;
 	connections: DiscoveredServerConnection[];
+	// Per-server access token issued by plex.tv. Required to query non-owned
+	// (shared) servers — the account token alone returns 401. Stripped from the
+	// payload returned by `getStatus()` so it never reaches the browser.
+	accessToken?: string;
 }
 
 export interface AuthStatus {
@@ -60,6 +64,7 @@ interface Row {
 	server_name: string | null;
 	server_base_url: string | null;
 	server_id: string | null;
+	server_access_token: string | null;
 	updated_at: number;
 }
 
@@ -96,7 +101,9 @@ export function getClientId(): string {
 export function getActiveConfig(): { baseUrl: string; token: string } | null {
 	const row = readRow();
 	if (row.auth_token && row.server_base_url) {
-		return { baseUrl: row.server_base_url, token: row.auth_token };
+		// Per-server token (from /resources `accessToken`) is required for shared
+		// servers; fall back to the account token for owned servers and legacy rows.
+		return { baseUrl: row.server_base_url, token: row.server_access_token || row.auth_token };
 	}
 	if (config.plexUrl && config.plexToken) {
 		return { baseUrl: config.plexUrl, token: config.plexToken };
@@ -118,10 +125,12 @@ export function getStatus(): AuthStatus {
 		};
 	}
 	if (row.auth_token) {
+		// Strip per-server accessTokens before sending to the client — they are secrets.
+		const safeServers = lastDiscoveredServers?.map(({ accessToken: _t, ...rest }) => rest);
 		return {
 			state: 'linked',
 			accountUser: row.account_user || undefined,
-			servers: lastDiscoveredServers,
+			servers: safeServers,
 			reason,
 		};
 	}
@@ -233,6 +242,7 @@ async function fetchPlexResources(token: string): Promise<DiscoveredServer[]> {
 		name: string;
 		owned: boolean;
 		provides: string;
+		accessToken?: string;
 		connections: Array<{ uri: string; local: boolean; relay: boolean; protocol: string }>;
 	}>;
 	return items
@@ -241,6 +251,7 @@ async function fetchPlexResources(token: string): Promise<DiscoveredServer[]> {
 			id: item.clientIdentifier,
 			name: item.name,
 			owned: item.owned,
+			accessToken: item.accessToken,
 			connections: (item.connections || []).map(c => ({
 				uri: c.uri,
 				local: c.local,
@@ -297,12 +308,15 @@ export async function selectServer(serverId: string, connectionUri?: string): Pr
 		throw err;
 	}
 
-	// Smoke test
+	// Smoke test — use the per-server access token if available (required for
+	// shared servers; owned servers accept either). /identity is public, but we
+	// also verify auth works by checking /library/sections returns non-401.
 	const stripped = chosenUri.replace(/\/+$/, '');
+	const probeToken = server.accessToken || row.auth_token;
 	let testRes: Response;
 	try {
-		testRes = await fetch(`${stripped}/identity?X-Plex-Token=${row.auth_token}`, {
-			headers: plexHeaders({ 'X-Plex-Token': row.auth_token }),
+		testRes = await fetch(`${stripped}/library/sections?X-Plex-Token=${probeToken}`, {
+			headers: plexHeaders({ 'X-Plex-Token': probeToken }),
 		});
 	} catch (err) {
 		const e: any = new Error(`Connection failed to ${chosenUri}`);
@@ -321,8 +335,9 @@ export async function selectServer(serverId: string, connectionUri?: string): Pr
 		server_base_url: stripped,
 		server_name: server.name,
 		server_id: server.id,
+		server_access_token: server.accessToken || null,
 	});
-	logger.info(`Plex auth: server selected — ${server.name} at ${stripped}`);
+	logger.info(`Plex auth: server selected — ${server.name} at ${stripped} (${server.accessToken ? 'per-server' : 'account'} token)`);
 }
 
 export function logout(): void {
@@ -334,6 +349,7 @@ export function logout(): void {
 		server_name: null,
 		server_base_url: null,
 		server_id: null,
+		server_access_token: null,
 	});
 	logger.info('Plex auth: logged out');
 }
