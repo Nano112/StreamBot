@@ -791,6 +791,44 @@ router.get('/api/bot/vc-history', (req: Request, res: Response) => {
 	res.json({ entries: getVCHistory() });
 });
 
+router.get('/api/bot/voice-channels', (_req: Request, res: Response) => {
+	const streaming = getStreamingService();
+	if (!streaming) { res.status(503).json({ error: 'Service not available' }); return; }
+	const client = streaming.getStreamer().client;
+	const me = client.user?.id;
+
+	const guilds = Array.from(client.guilds.cache.values()).map((g: any) => {
+		const iconHash = g.icon;
+		const iconUrl = iconHash
+			? `https://cdn.discordapp.com/icons/${g.id}/${iconHash}.png?size=64`
+			: null;
+		const channels = Array.from(g.channels.cache.values())
+			.filter((c: any) => c.type === 'GUILD_VOICE' || c.type === 'GUILD_STAGE_VOICE')
+			.map((c: any) => {
+				const parent = c.parent;
+				const member = me ? g.members.cache.get(me) : null;
+				const perms = (member && c.permissionsFor) ? c.permissionsFor(member) : null;
+				return {
+					id: c.id,
+					name: c.name,
+					type: c.type === 'GUILD_STAGE_VOICE' ? 'stage' : 'voice',
+					categoryName: parent?.name || null,
+					userCount: c.members?.size ?? 0,
+					canConnect: perms ? perms.has('CONNECT') : true,
+				};
+			})
+			.sort((a: any, b: any) => {
+				if (a.categoryName !== b.categoryName) {
+					return (a.categoryName || '').localeCompare(b.categoryName || '');
+				}
+				return a.name.localeCompare(b.name);
+			});
+		return { id: g.id, name: g.name, iconUrl, channels };
+	}).sort((a, b) => a.name.localeCompare(b.name));
+
+	res.json({ guilds });
+});
+
 router.delete('/api/bot/vc-history', (req: Request, res: Response) => {
 	const { guildId, channelId } = req.body || {};
 	if (guildId && channelId) {

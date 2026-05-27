@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogIn, LogOut, Plus } from 'lucide-react';
+import { ChevronsUpDown, LogIn, LogOut, Plus } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api';
 import type { BotStatus } from '@/lib/types';
+import { VoiceChannelPicker } from './voice-channel-picker';
 
 interface ConnectionButtonsProps {
 	status: BotStatus | undefined;
@@ -21,15 +22,10 @@ interface ConnectionButtonsProps {
 export function ConnectionButtons({ status }: ConnectionButtonsProps) {
 	const qc = useQueryClient();
 	const [inviteOpen, setInviteOpen] = useState(false);
+	const [pickerOpen, setPickerOpen] = useState(false);
 	const [inviteCode, setInviteCode] = useState('');
 
 	const invalidate = () => qc.invalidateQueries({ queryKey: ['bot', 'status'] });
-
-	const joinMut = useMutation({
-		mutationFn: () => api('/api/bot/join', { method: 'POST', body: JSON.stringify({}) }),
-		onSuccess: () => { invalidate(); toast.success('Joined voice channel'); },
-		onError: (e: Error) => toast.error(`Join failed: ${e.message}`),
-	});
 
 	const leaveMut = useMutation({
 		mutationFn: () => api('/api/bot/leave', { method: 'POST' }),
@@ -55,22 +51,32 @@ export function ConnectionButtons({ status }: ConnectionButtonsProps) {
 		<>
 			<div className="flex items-center gap-2">
 				{joined ? (
-					<Button
-						variant="ghost"
-						size="sm"
-						className="gap-1.5 text-[color:var(--color-fg-muted)] hover:text-[color:var(--color-fg)] cursor-pointer"
-						onClick={() => leaveMut.mutate()}
-						disabled={leaveMut.isPending}
-					>
-						<LogOut size={14} strokeWidth={1.5} />
-						<span className="text-xs tracking-wide">Leave</span>
-					</Button>
+					<>
+						<Button
+							variant="ghost"
+							size="sm"
+							className="gap-1.5 text-[color:var(--color-fg-muted)] hover:text-[color:var(--color-fg)] cursor-pointer"
+							onClick={() => setPickerOpen(true)}
+						>
+							<ChevronsUpDown size={14} strokeWidth={1.5} />
+							<span className="text-xs tracking-wide">Switch</span>
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							className="gap-1.5 text-[color:var(--color-fg-muted)] hover:text-[color:var(--color-fg)] cursor-pointer"
+							onClick={() => leaveMut.mutate()}
+							disabled={leaveMut.isPending}
+						>
+							<LogOut size={14} strokeWidth={1.5} />
+							<span className="text-xs tracking-wide">Leave</span>
+						</Button>
+					</>
 				) : (
 					<Button
 						size="sm"
 						className="gap-1.5 bg-[color:var(--color-accent)] text-[color:var(--color-bg)] hover:bg-[color:var(--color-accent)]/90 cursor-pointer"
-						onClick={() => joinMut.mutate()}
-						disabled={joinMut.isPending}
+						onClick={() => setPickerOpen(true)}
 					>
 						<LogIn size={14} strokeWidth={1.5} />
 						<span className="text-xs tracking-wide">Join VC</span>
@@ -88,11 +94,13 @@ export function ConnectionButtons({ status }: ConnectionButtonsProps) {
 				</Button>
 			</div>
 
+			<VoiceChannelPicker open={pickerOpen} onOpenChange={setPickerOpen} />
+
 			<Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
 				<DialogContent className="bg-[color:var(--color-surface)] border-[color:var(--color-border)] max-w-sm">
 					<DialogHeader>
 						<DialogTitle className="font-sans text-sm tracking-[0.18em] uppercase text-[color:var(--color-fg-muted)]">
-							Join via Invite
+							Join a new server
 						</DialogTitle>
 					</DialogHeader>
 					<div className="space-y-4 pt-2">
@@ -111,6 +119,9 @@ export function ConnectionButtons({ status }: ConnectionButtonsProps) {
 									}
 								}}
 							/>
+							<p className="text-[10px] text-[color:var(--color-fg-dim)] pt-1">
+								Use this only to join a brand-new server. To pick a voice channel in an existing server, use Join VC.
+							</p>
 						</div>
 						<Button
 							className="w-full bg-[color:var(--color-accent)] text-[color:var(--color-bg)] hover:bg-[color:var(--color-accent)]/90 cursor-pointer"

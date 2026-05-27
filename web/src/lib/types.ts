@@ -3,6 +3,11 @@ export interface BotStatus {
 	joined: boolean;
 	playing: boolean;
 	paused: boolean;
+	channelInfo?: {
+		guildId: string;
+		channelId: string;
+		cmdChannelId?: string;
+	};
 	currentTrack: {
 		id: string;
 		title: string;

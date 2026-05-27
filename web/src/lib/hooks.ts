@@ -301,3 +301,71 @@ export function useLogs(enabled: boolean) {
 		enabled,
 	});
 }
+
+// ─── Voice channels ────────────────────────────────────────────────
+
+export interface VoiceChannel {
+	id: string;
+	name: string;
+	type: 'voice' | 'stage';
+	categoryName: string | null;
+	userCount: number;
+	canConnect: boolean;
+}
+
+export interface VoiceGuild {
+	id: string;
+	name: string;
+	iconUrl: string | null;
+	channels: VoiceChannel[];
+}
+
+export interface VCHistoryEntry {
+	guildId: string;
+	guildName: string;
+	guildIcon: string | null;
+	channelId: string;
+	channelName: string;
+	lastUsed: string;
+}
+
+export function useVoiceChannels(enabled: boolean = true) {
+	return useQuery<{ guilds: VoiceGuild[] }>({
+		queryKey: ['bot', 'voice-channels'],
+		queryFn: () => api<{ guilds: VoiceGuild[] }>('/api/bot/voice-channels'),
+		enabled,
+		staleTime: 30_000,
+	});
+}
+
+export function useVCHistory(enabled: boolean = true) {
+	return useQuery<{ entries: VCHistoryEntry[] }>({
+		queryKey: ['bot', 'vc-history'],
+		queryFn: () => api<{ entries: VCHistoryEntry[] }>('/api/bot/vc-history'),
+		enabled,
+		staleTime: 30_000,
+	});
+}
+
+export function useVCHistoryRemove() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (v: { guildId: string; channelId: string }) =>
+			api('/api/bot/vc-history', { method: 'DELETE', body: JSON.stringify(v) }),
+		onSuccess: () => qc.invalidateQueries({ queryKey: ['bot', 'vc-history'] }),
+		onError: (e: Error) => toast.error(`Remove failed: ${e.message}`),
+	});
+}
+
+export function useJoinChannel() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (v: { guildId: string; channelId: string }) =>
+			api('/api/bot/join', { method: 'POST', body: JSON.stringify(v) }),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: ['bot', 'status'] });
+			qc.invalidateQueries({ queryKey: ['bot', 'vc-history'] });
+		},
+		onError: (e: Error) => toast.error(`Join failed: ${e.message}`),
+	});
+}
