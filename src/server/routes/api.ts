@@ -660,18 +660,26 @@ router.post('/api/bot/overlay', (req: Request, res: Response) => {
 		return;
 	}
 
-	const { enabled, announcement } = req.body;
+	const { enabled, announcement, widgets } = req.body;
 	if (typeof enabled === 'boolean') {
 		streaming.setOverlayEnabled(enabled);
 	}
 	if (typeof announcement === 'string') {
 		streaming.setOverlayAnnouncement(announcement);
 	}
+	if (widgets && typeof widgets === 'object') {
+		for (const name of ['announce', 'brand', 'nowplay', 'queue'] as const) {
+			if (typeof widgets[name] === 'boolean') {
+				streaming.setOverlayWidgetEnabled(name, widgets[name]);
+			}
+		}
+	}
 
 	res.json({
 		success: true,
 		enabled: streaming.isOverlayEnabled(),
 		announcement: streaming.getOverlayAnnouncement(),
+		widgets: streaming.getOverlayWidgets(),
 	});
 });
 
@@ -685,6 +693,7 @@ router.get('/api/bot/overlay', (req: Request, res: Response) => {
 	res.json({
 		enabled: streaming.isOverlayEnabled(),
 		announcement: streaming.getOverlayAnnouncement(),
+		widgets: streaming.getOverlayWidgets(),
 	});
 });
 

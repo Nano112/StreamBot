@@ -40,7 +40,6 @@ class StreamController:
     def __init__(self):
         self.pipeline = None
         self.loop = GLib.MainLoop()
-        self.overlay_text = "StreamBot | Idle"
         self.current_mode = "idle"  # idle or media
         self.audio_selector = None   # input-selector for audio track switching
         self.audio_pads = []         # list of (pad_index, sink_pad) tuples
@@ -53,9 +52,18 @@ class StreamController:
         desc = (
             f'videotestsrc pattern=black is-live=true ! '
             f'video/x-raw,width={WIDTH},height={HEIGHT},framerate={FPS}/1 ! '
-            f'textoverlay name=overlay text="{self._escape_text(self.overlay_text)}" '
-            f'  valignment=top halignment=right font-desc="Monospace 11" '
-            f'  shaded-background=true shading-value=160 xpad=10 ypad=10 line-alignment=left ! '
+            f'textoverlay name=announce text="" use-markup=true '
+            f'  valignment=top halignment=center shaded-background=true shading-value=80 '
+            f'  xpad=24 ypad=24 line-alignment=center ! '
+            f'textoverlay name=brand text="" use-markup=true '
+            f'  valignment=top halignment=right shaded-background=true shading-value=80 '
+            f'  xpad=22 ypad=22 line-alignment=right ! '
+            f'textoverlay name=nowplay text="" use-markup=true '
+            f'  valignment=bottom halignment=left shaded-background=true shading-value=80 '
+            f'  xpad=22 ypad=22 line-alignment=left ! '
+            f'textoverlay name=queue text="" use-markup=true '
+            f'  valignment=bottom halignment=right shaded-background=true shading-value=80 '
+            f'  xpad=22 ypad=22 line-alignment=right ! '
             f'tee name=vtee '
             f'vtee. ! queue ! videoconvert ! '
             f'x264enc tune=zerolatency speed-preset=ultrafast bitrate={BITRATE} bframes=0 key-int-max={FPS*2} ! '
@@ -125,16 +133,27 @@ class StreamController:
         vcaps = Gst.ElementFactory.make("capsfilter", "vcaps")
         vcaps.set_property("caps", Gst.Caps.from_string(
             f"video/x-raw,width={WIDTH},height={HEIGHT}"))
-        overlay = Gst.ElementFactory.make("textoverlay", "overlay")
-        overlay.set_property("text", self.overlay_text)
-        overlay.set_property("valignment", "top")
-        overlay.set_property("halignment", "right")
-        overlay.set_property("font-desc", "Monospace 11")
-        overlay.set_property("shaded-background", True)
-        overlay.set_property("shading-value", 160)
-        overlay.set_property("xpad", 10)
-        overlay.set_property("ypad", 10)
-        overlay.set_property("line-alignment", "left")
+
+        def make_overlay(name, valignment, halignment, line_alignment):
+            el = Gst.ElementFactory.make("textoverlay", name)
+            el.set_property("text", "")
+            el.set_property("use-markup", True)
+            el.set_property("valignment", valignment)
+            el.set_property("halignment", halignment)
+            el.set_property("shaded-background", True)
+            el.set_property("shading-value", 80)
+            el.set_property("xpad", 22)
+            el.set_property("ypad", 22)
+            el.set_property("line-alignment", line_alignment)
+            return el
+
+        ov_announce = make_overlay("announce", "top",    "center", "center")
+        ov_announce.set_property("xpad", 24)
+        ov_announce.set_property("ypad", 24)
+        ov_brand   = make_overlay("brand",    "top",    "right",  "right")
+        ov_nowplay = make_overlay("nowplay",  "bottom", "left",   "left")
+        ov_queue   = make_overlay("queue",    "bottom", "right",  "right")
+
         vtee = Gst.ElementFactory.make("tee", "vtee")
         venc = Gst.ElementFactory.make("x264enc", "venc")
         venc.set_property("tune", 0x04)  # zerolatency
@@ -187,13 +206,16 @@ class StreamController:
         pvsink.set_property("drop", True)
 
         # Add all to pipeline
-        for el in [dec, vqueue1, vconv, vscale, vcaps, overlay, vtee, venc, h264parse, vqueue2,
-                    asel, aconv, aresample, acaps, aenc, aqueue2, mux, sink,
-                    pvq, pvrate, pvcaps, pvconv, pvenc, pvsink]:
+        for el in [dec, vqueue1, vconv, vscale, vcaps,
+                   ov_announce, ov_brand, ov_nowplay, ov_queue,
+                   vtee, venc, h264parse, vqueue2,
+                   asel, aconv, aresample, acaps, aenc, aqueue2, mux, sink,
+                   pvq, pvrate, pvcaps, pvconv, pvenc, pvsink]:
             self.pipeline.add(el)
 
         # Link video branch up to the tee
-        Gst.Element.link_many(vqueue1, vconv, vscale, vcaps, overlay, vtee)
+        Gst.Element.link_many(vqueue1, vconv, vscale, vcaps,
+                              ov_announce, ov_brand, ov_nowplay, ov_queue, vtee)
         # Tee has request pads — request one src pad per branch
         tee_main_src = vtee.request_pad_simple("src_%u")
         tee_main_src.link(venc.get_static_pad("sink"))
@@ -338,12 +360,17 @@ class StreamController:
         else:
             log(f"Audio track {track_index} queued for next media")
 
-    def set_overlay(self, text):
-        self.overlay_text = text
+    def set_overlay_widget(self, name, text):
+        """Set text on a named overlay widget (announce/brand/nowplay/queue)."""
         if self.pipeline:
-            overlay = self.pipeline.get_by_name("overlay")
-            if overlay:
-                overlay.set_property("text", text)
+            el = self.pipeline.get_by_name(name)
+            if el:
+                el.set_property("text", text)
+
+    def clear_all_overlays(self):
+        """Clear all four overlay widgets."""
+        for name in ("announce", "brand", "nowplay", "queue"):
+            self.set_overlay_widget(name, "")
 
     def _switch_to_idle(self):
         log("Switching to idle")
@@ -422,8 +449,14 @@ def command_reader(controller):
             GLib.idle_add(controller.resume)
         elif action == "seek":
             GLib.idle_add(controller.seek, cmd.get("position", 0))
+        elif action == "overlay-widget":
+            name = cmd.get("name", "")
+            text = cmd.get("text", "")
+            if name in ("announce", "brand", "nowplay", "queue"):
+                GLib.idle_add(controller.set_overlay_widget, name, text)
         elif action == "overlay":
-            GLib.idle_add(controller.set_overlay, cmd.get("text", ""))
+            # clear-all signal (text ignored)
+            GLib.idle_add(controller.clear_all_overlays)
         elif action == "audio_track":
             GLib.idle_add(controller.set_audio_track, cmd.get("index", 0))
         elif action == "idle":

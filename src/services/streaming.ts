@@ -7,7 +7,7 @@ import { LLMService } from './llm.js';
 import { ProviderManager } from './providers/manager.js';
 import { ResolvedMedia } from './providers/types.js';
 import { PlaybackController } from './playback.js';
-import { StreamComposer } from './stream-composer.js';
+import { StreamComposer, WidgetName } from './stream-composer.js';
 import logger, { getLogBuffer } from '../utils/logger.js';
 import { DiscordUtils, ErrorUtils } from '../utils/shared.js';
 import { QueueItem, StreamStatus } from '../types/index.js';
@@ -28,6 +28,12 @@ export class StreamingService {
 	private overlayInterval: ReturnType<typeof setInterval> | null = null;
 	private overlayEnabled: boolean = true;
 	private overlayAnnouncement: string = '';
+	private overlayWidgets: { announce: boolean; brand: boolean; nowplay: boolean; queue: boolean } = {
+		announce: true,
+		brand: true,
+		nowplay: true,
+		queue: true,
+	};
 
 	constructor(client: Client, streamStatus: StreamStatus, providerManager: ProviderManager) {
 		this.streamer = new Streamer(client);
@@ -328,7 +334,72 @@ export class StreamingService {
 		const current = qs.getCurrent();
 		const allItems = qs.getQueue();
 
-		// Build queue item list for the canvas overlay
+		// ── Clock components ──────────────────────────────────────────
+		const now = new Date();
+		const hh = String(now.getHours()).padStart(2, '0');
+		const mm = String(now.getMinutes()).padStart(2, '0');
+		const ss = String(now.getSeconds()).padStart(2, '0');
+		const colon = now.getSeconds() % 2 === 0
+			? '<span foreground="#e89a3d">:</span>'
+			: '<span foreground="#666260">:</span>';
+
+		// ── brand widget ──────────────────────────────────────────────
+		if (this.overlayWidgets.brand) {
+			const label = `<span font_desc="Sans 11" foreground="#9a9690" letter_spacing="3500">GATHERR</span>`;
+			const clock = `<span font_desc="Monospace 28" foreground="#f0ede9">${hh}${colon}${mm}${colon}${ss}</span>`;
+			this.composer.setOverlayWidget('brand', `${label}\n${clock}`);
+		} else {
+			this.composer.setOverlayWidget('brand', '');
+		}
+
+		// ── announce widget ───────────────────────────────────────────
+		if (this.overlayWidgets.announce && this.overlayAnnouncement?.trim()) {
+			const lbl = `<span font_desc="Sans 10" foreground="#9a9690" letter_spacing="4000">ANNOUNCEMENT</span>`;
+			const body = `<span font_desc="Sans Italic 22" foreground="#f0ede9">${pangoEsc(this.overlayAnnouncement.trim())}</span>`;
+			this.composer.setOverlayWidget('announce', `${lbl}\n${body}`);
+		} else {
+			this.composer.setOverlayWidget('announce', '');
+		}
+
+		// ── nowplay widget ────────────────────────────────────────────
+		if (this.overlayWidgets.nowplay && (this.streamStatus.playing || this.streamStatus.paused) && this.currentResolved) {
+			const pos = this.composer.getPosition();
+			const dur = this.composer.getDuration() || this.currentResolved.duration || 0;
+			const statusLabel = this.streamStatus.paused
+				? `<span font_desc="Sans 11" foreground="#e89a3d" letter_spacing="3500">PAUSED</span>`
+				: `<span font_desc="Sans 11" foreground="#e89a3d" letter_spacing="3500">NOW PLAYING</span>`;
+			const title = `<span font_desc="Sans Bold 22" foreground="#f0ede9">${pangoEsc(truncate(this.currentResolved.title, 50))}</span>`;
+			const positionStr = dur > 0
+				? `<span font_desc="Monospace 12" foreground="#9a9690">${fmtTime(pos)} / ${fmtTime(dur)}</span>`
+				: `<span font_desc="Monospace 12" foreground="#9a9690">${fmtTime(pos)}</span>`;
+			const bar = buildProgressBar(pos, dur);
+			const parts = [statusLabel, title, positionStr];
+			if (bar) parts.push(bar);
+			this.composer.setOverlayWidget('nowplay', parts.join('\n'));
+		} else {
+			this.composer.setOverlayWidget('nowplay', '');
+		}
+
+		// ── queue widget ──────────────────────────────────────────────
+		// When playing: items after current. When idle: all items.
+		const upcoming = (this.streamStatus.playing || this.streamStatus.paused) && current
+			? allItems.filter(item => item.id !== current.id)
+			: allItems;
+		if (this.overlayWidgets.queue && upcoming.length > 0) {
+			const lbl = `<span font_desc="Sans 11" foreground="#9a9690" letter_spacing="3500">UP NEXT</span>`;
+			const lines = upcoming.slice(0, 4).map((item, i) => {
+				const color = i === 0 ? '#f0ede9' : '#9a9690';
+				return `<span font_desc="Sans 13" foreground="${color}">${pangoEsc(truncate(item.title, 32))}</span>`;
+			});
+			const more = upcoming.length > 4
+				? `\n<span font_desc="Sans Italic 11" foreground="#666260">+${upcoming.length - 4} more</span>`
+				: '';
+			this.composer.setOverlayWidget('queue', `${lbl}\n${lines.join('\n')}${more}`);
+		} else {
+			this.composer.setOverlayWidget('queue', '');
+		}
+
+		// Keep idle frame renderer in sync (used for the web JPEG preview)
 		const queueItems = allItems.map(item => {
 			const isCurrent = current && item.id === current.id;
 			const state = item.type === 'resolving' ? 'resolving' as const
@@ -337,14 +408,8 @@ export class StreamingService {
 				: 'queued' as const;
 			return { title: item.title, state };
 		});
-
-		// Get most recent log line
 		const logs = getLogBuffer();
-		const recentLog = logs.length > 0
-			? truncate(logs[logs.length - 1]?.message || '', 100)
-			: '';
-
-		// Voice activity from STT
+		const recentLog = logs.length > 0 ? truncate(logs[logs.length - 1]?.message || '', 100) : '';
 		const speakers = this.sttService.getActiveSpeakers();
 		const lastTranscript = this.sttService.getLastTranscript();
 		const wakeWordActive = this.sttService.isWakeWordActive();
@@ -375,15 +440,12 @@ export class StreamingService {
 				announcement: this.overlayAnnouncement || undefined,
 			});
 		}
-
-		// Re-render the overlay (1/sec — the timer writes the cached buffer at 30fps)
-		this.composer.refreshOverlay();
 	}
 
 	public setOverlayEnabled(enabled: boolean): void {
 		this.overlayEnabled = enabled;
 		if (!enabled) {
-			this.composer.clearOverlay();
+			this.composer.clearOverlay(); // clears all four widgets
 		} else {
 			this.tickOverlay();
 		}
@@ -401,6 +463,15 @@ export class StreamingService {
 
 	public isOverlayEnabled(): boolean {
 		return this.overlayEnabled;
+	}
+
+	public setOverlayWidgetEnabled(name: WidgetName, enabled: boolean): void {
+		this.overlayWidgets[name] = enabled;
+		if (this.overlayEnabled) this.tickOverlay();
+	}
+
+	public getOverlayWidgets(): { announce: boolean; brand: boolean; nowplay: boolean; queue: boolean } {
+		return { ...this.overlayWidgets };
 	}
 
 	// ── Voice + Composer lifecycle ───────────────────────────────────
@@ -638,4 +709,22 @@ function fmtTime(s: number): string {
 
 function truncate(s: string, max: number): string {
 	return s.length > max ? s.substring(0, max - 3) + '...' : s;
+}
+
+function pangoEsc(s: string): string {
+	return s
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&apos;');
+}
+
+function buildProgressBar(pos: number, dur: number): string {
+	if (!dur || dur <= 0) return '';
+	const cells = 20;
+	const filled = Math.min(cells, Math.max(0, Math.round((pos / dur) * cells)));
+	const done = '▰'.repeat(filled);
+	const todo = '▱'.repeat(cells - filled);
+	return `<span font_desc="Monospace 12" foreground="#e89a3d">${done}</span><span font_desc="Monospace 12" foreground="#666260">${todo}</span>`;
 }

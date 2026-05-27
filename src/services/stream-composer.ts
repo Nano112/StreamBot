@@ -7,6 +7,8 @@ import config from '../config.js';
 import logger from '../utils/logger.js';
 import { FrameRenderer, Colors } from '../utils/frame-renderer.js';
 
+export type WidgetName = 'announce' | 'brand' | 'nowplay' | 'queue';
+
 /**
  * StreamComposer: GStreamer backend with prepareStream bridge.
  *
@@ -61,59 +63,12 @@ export class StreamComposer {
 
 	// ── Overlay ──────────────────────────────────────────────────────
 
-	refreshOverlay(): void {
-		const info = this._idleInfo;
-		const lines: string[] = [];
-		const now = new Date();
-		const t = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-
-		// Announcement is pinned to the top of the overlay in every state.
-		if (info.announcement?.trim()) {
-			lines.push(`* ${info.announcement.trim()}`);
-			lines.push('');
-		}
-
-		if (this._mediaPlaying || this._paused) {
-			// During media: compact overlay in corner
-			lines.push(`${info.status || 'Playing'}  ${t}`);
-			if (info.title) {
-				lines.push(info.title.length > 40 ? info.title.substring(0,38)+'..' : info.title);
-			}
-			if (info.position) lines.push(info.position);
-			if (info.queue && info.queue > 1) lines.push(`Queue: ${info.queue - 1} more`);
-		} else {
-			// Idle: full overlay
-			lines.push(`Gatherr  ${t}`);
-			lines.push('');
-			lines.push(`Queue (${info.queue || 0})`);
-			if (info.queueItems?.length) {
-				for (let i = 0; i < Math.min(info.queueItems.length, 8); i++) {
-					const qi = info.queueItems[i];
-					const icon = qi.state==='playing'?'>':qi.state==='paused'?'|':qi.state==='resolving'?'?':' ';
-					lines.push(`${icon} ${qi.title.length>28?qi.title.substring(0,26)+'..':qi.title}`);
-				}
-			} else lines.push('  Empty');
-		}
-
-		// Active speakers
-		if (info.speakers?.length) {
-			lines.push('');
-			lines.push(`Speaking: ${info.speakers.join(', ')}`);
-		}
-		if (info.wakeWordActive) {
-			lines.push('>> LISTENING...');
-		}
-		if (info.lastTranscript) {
-			const tr = info.lastTranscript.length > 45 ? info.lastTranscript.substring(0,43)+'..' : info.lastTranscript;
-			lines.push(`"${tr}"`);
-		}
-
-		const text = lines.join('\n');
-		this.sendCmd({ cmd: 'overlay', text });
+	setOverlayWidget(name: WidgetName, markup: string): void {
+		this.sendCmd({ cmd: 'overlay-widget', name, text: markup });
 	}
 
 	clearOverlay(): void {
-		this.sendCmd({ cmd: 'overlay', text: '' });
+		this.sendCmd({ cmd: 'overlay', text: '' }); // Python clears all four widgets
 	}
 
 	// ── Lifecycle ────────────────────────────────────────────────────

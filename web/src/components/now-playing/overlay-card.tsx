@@ -8,9 +8,17 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api';
 
+interface OverlayWidgets {
+	announce: boolean;
+	brand: boolean;
+	nowplay: boolean;
+	queue: boolean;
+}
+
 interface OverlayState {
 	enabled: boolean;
 	announcement: string;
+	widgets: OverlayWidgets;
 }
 
 const FRAME_REFRESH_MS = 500;
@@ -34,6 +42,7 @@ export function OverlayCard() {
 
 	const enabled = data?.enabled ?? false;
 	const remoteAnnouncement = data?.announcement ?? '';
+	const remoteWidgets: OverlayWidgets = data?.widgets ?? { announce: true, brand: true, nowplay: true, queue: true };
 
 	const [draft, setDraft] = useState(remoteAnnouncement);
 	const draftDirtyRef = useRef(false);
@@ -42,6 +51,10 @@ export function OverlayCard() {
 	}, [remoteAnnouncement]);
 
 	const dirty = draft !== remoteAnnouncement;
+
+	function toggleWidget(name: keyof OverlayWidgets, value: boolean) {
+		overlayMut.mutate({ widgets: { ...remoteWidgets, [name]: value } });
+	}
 
 	function commitAnnouncement(value: string) {
 		const text = value.trim();
@@ -158,20 +171,43 @@ export function OverlayCard() {
 					</div>
 
 					<div>
-						<h4 className="text-[10px] tracking-[0.22em] uppercase text-[color:var(--color-fg-dim)] mb-2">
-							What's rendered
+						<h4 className="text-[10px] tracking-[0.22em] uppercase text-[color:var(--color-fg-dim)] mb-3">
+							Widgets
 						</h4>
-						<ul className="space-y-1.5 text-xs">
-							<RenderedLine label="State" value={enabled ? 'Active' : 'Hidden'} valueAccent={enabled} />
-							<RenderedLine label="Title bar" value="Gatherr · HH:MM:SS · WxH@fps" mono />
-							<RenderedLine label="Pinned" value={remoteAnnouncement || '(none)'} mono dim={!remoteAnnouncement} />
-							<RenderedLine label="Footer" value="Status · Title · Position · Queue" mono />
-						</ul>
+						<div className="space-y-2">
+							<WidgetRow
+								label="Announcement banner"
+								hint="top center"
+								enabled={remoteWidgets.announce}
+								disabled={overlayMut.isPending}
+								onToggle={(v) => toggleWidget('announce', v)}
+							/>
+							<WidgetRow
+								label="Brand &amp; clock"
+								hint="top right"
+								enabled={remoteWidgets.brand}
+								disabled={overlayMut.isPending}
+								onToggle={(v) => toggleWidget('brand', v)}
+							/>
+							<WidgetRow
+								label="Now playing chyron"
+								hint="bottom left"
+								enabled={remoteWidgets.nowplay}
+								disabled={overlayMut.isPending}
+								onToggle={(v) => toggleWidget('nowplay', v)}
+							/>
+							<WidgetRow
+								label="Up next"
+								hint="bottom right"
+								enabled={remoteWidgets.queue}
+								disabled={overlayMut.isPending}
+								onToggle={(v) => toggleWidget('queue', v)}
+							/>
+						</div>
+						<p className="mt-3 text-[10px] text-[color:var(--color-fg-dim)] leading-relaxed">
+							Widgets composite on top of the video stream. Toggle individually.
+						</p>
 					</div>
-
-					<p className="text-[10px] text-[color:var(--color-fg-dim)] leading-relaxed">
-						Preview shows the idle frame the bot streams when nothing is playing. During media, the compositor overlays this text on top of the video.
-					</p>
 				</div>
 			</div>
 		</div>
@@ -226,21 +262,21 @@ function PreviewImage({ active }: { active: boolean }) {
 	);
 }
 
-function RenderedLine({
-	label, value, mono = false, dim = false, valueAccent = false,
-}: { label: string; value: string; mono?: boolean; dim?: boolean; valueAccent?: boolean }) {
+function WidgetRow({
+	label, hint, enabled, disabled, onToggle,
+}: { label: string; hint: string; enabled: boolean; disabled: boolean; onToggle: (v: boolean) => void }) {
 	return (
-		<li className="grid grid-cols-[80px_1fr] gap-2 items-baseline">
-			<span className="text-[10px] tracking-[0.18em] uppercase text-[color:var(--color-fg-dim)]">{label}</span>
-			<span
-				className={[
-					mono ? 'font-mono' : '',
-					dim ? 'text-[color:var(--color-fg-dim)]' : valueAccent ? 'text-[color:var(--color-accent)]' : 'text-[color:var(--color-fg)]',
-					'truncate',
-				].join(' ')}
-			>
-				{value}
-			</span>
-		</li>
+		<div className="flex items-center justify-between gap-3">
+			<div className="flex flex-col gap-0.5 min-w-0">
+				<span className="text-sm text-[color:var(--color-fg)] truncate">{label}</span>
+				<span className="text-[10px] font-mono tracking-[0.15em] uppercase text-[color:var(--color-fg-dim)]">{hint}</span>
+			</div>
+			<Switch
+				checked={enabled}
+				onCheckedChange={onToggle}
+				disabled={disabled}
+				aria-label={`Toggle ${label}`}
+			/>
+		</div>
 	);
 }
