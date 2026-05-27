@@ -14,6 +14,9 @@ data/
 .*.node-gyp/
 node-compile-cache/
 
+# shadcn CLI scratch dirs (left behind on every `shadcn add`)
+shadcn-*/
+
 # frontend build artifacts
 web/node_modules/
 web/dist/
